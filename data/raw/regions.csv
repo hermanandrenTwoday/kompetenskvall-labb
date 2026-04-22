@@ -1,38 +1,38 @@
 Country,RegionGroup,RegionNote
-Australia,APAC,Asia-Pacific markets
-Austria,Western Europe,Large continental markets
-Bahrain,Middle East,Middle Eastern markets
-Belgium,Western Europe,Large continental markets
-Brazil,South America,South American markets
-Canada,North America,North American markets
-Channel Islands,British Isles,Nearby English-speaking islands
-Cyprus,Southern Europe,Southern European markets
-Czech Republic,Eastern Europe,Eastern European markets
-Denmark,Nordics,Northern European markets
-EIRE,British Isles,Nearby English-speaking islands
-European Community,Other,Unmapped or rare countries
-Finland,Nordics,Northern European markets
-France,Western Europe,Large continental markets
-Germany,Western Europe,Large continental markets
-Greece,Southern Europe,Southern European markets
-Iceland,Nordics,Northern European markets
-Israel,Middle East,Middle Eastern markets
-Italy,Southern Europe,Southern European markets
-Japan,APAC,Asia-Pacific markets
-Lebanon,Middle East,Middle Eastern markets
-Lithuania,Eastern Europe,Eastern European markets
-Malta,Southern Europe,Southern European markets
-Netherlands,Western Europe,Large continental markets
-Norway,Nordics,Northern European markets
-Poland,Eastern Europe,Eastern European markets
-Portugal,Southern Europe,Southern European markets
-RSA,Africa,African markets
-Saudi Arabia,Middle East,Middle Eastern markets
-Singapore,APAC,Asia-Pacific markets
-Spain,Southern Europe,Southern European markets
-Sweden,Nordics,Northern European markets
-Switzerland,Western Europe,Large continental markets
-USA,North America,North American markets
-United Arab Emirates,Middle East,Middle Eastern markets
-United Kingdom,UK & Ireland,Core home market and nearby islands
-Unspecified,Other,Unmapped or rare countries
+Australia,APAC,Asien-Stillahavsmarknader
+Austria,Västeuropa,Stora kontinentala marknader
+Bahrain,Mellanöstern,Mellanöstliga marknader
+Belgium,Västeuropa,Stora kontinentala marknader
+Brazil,Sydamerika,Sydamerikanska marknader
+Canada,Nordamerika,Nordamerikanska marknader
+Channel Islands,Brittiska öarna,Närliggande engelskspråkiga öar
+Cyprus,Sydeuropa,Sydeuropeiska marknader
+Czech Republic,Östeuropa,Östeuropeiska marknader
+Denmark,Norden,Nordiska marknader
+EIRE,Brittiska öarna,Närliggande engelskspråkiga öar
+European Community,Övrigt,Oklassade eller ovanliga länder
+Finland,Norden,Nordiska marknader
+France,Västeuropa,Stora kontinentala marknader
+Germany,Västeuropa,Stora kontinentala marknader
+Greece,Sydeuropa,Sydeuropeiska marknader
+Iceland,Norden,Nordiska marknader
+Israel,Mellanöstern,Mellanöstliga marknader
+Italy,Sydeuropa,Sydeuropeiska marknader
+Japan,APAC,Asien-Stillahavsmarknader
+Lebanon,Mellanöstern,Mellanöstliga marknader
+Lithuania,Östeuropa,Östeuropeiska marknader
+Malta,Sydeuropa,Sydeuropeiska marknader
+Netherlands,Västeuropa,Stora kontinentala marknader
+Norway,Norden,Nordiska marknader
+Poland,Östeuropa,Östeuropeiska marknader
+Portugal,Sydeuropa,Sydeuropeiska marknader
+RSA,Afrika,Afrikanska marknader
+Saudi Arabia,Mellanöstern,Mellanöstliga marknader
+Singapore,APAC,Asien-Stillahavsmarknader
+Spain,Sydeuropa,Sydeuropeiska marknader
+Sweden,Norden,Nordiska marknader
+Switzerland,Västeuropa,Stora kontinentala marknader
+USA,Nordamerika,Nordamerikanska marknader
+United Arab Emirates,Mellanöstern,Mellanöstliga marknader
+United Kingdom,Storbritannien och Irland,Kärnmarknad och närliggande öar
+Unspecified,Övrigt,Oklassade eller ovanliga länder
