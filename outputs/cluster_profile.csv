@@ -1,0 +1,5 @@
+Cluster,CustomerCount,MeanRecency,MeanFrequency,MeanMonetary,MeanAOV,MeanBasketSize,MeanUniqueProducts
+0,913,26.7,11.2,7224.6,815.9,4217.3,151.9
+1,1261,131.2,1.6,772.0,502.1,494.3,35.8
+2,1089,160.1,1.5,226.2,160.3,99.1,13.4
+3,1075,34.6,4.4,1019.1,247.2,545.3,63.5
