@@ -97,7 +97,7 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Silhouette score short explanation
+# MAGIC ## Silhouette score and elbow short explanation
 # MAGIC
 # MAGIC Silhouette score measures how clearly one point belongs to its own cluster compared with the nearest other cluster.
 # MAGIC
@@ -107,6 +107,10 @@ else:
 # MAGIC
 # MAGIC Treat it as a technical signal, not a final business answer. A slightly lower score can still be useful if the
 # MAGIC resulting segments are easier to act on.
+# MAGIC
+# MAGIC The elbow method looks at inertia: how tightly points sit around their cluster centers. Inertia almost always
+# MAGIC improves when `k` increases, so we look for the point where improvement starts flattening out. That bend is the
+# MAGIC "elbow". It is also a guide, not a rule.
 
 # COMMAND ----------
 
@@ -203,12 +207,12 @@ preprocessor = ColumnTransformer(
 # MAGIC ## Train several candidate clusterings
 # MAGIC
 # MAGIC There is no label column here. KMeans groups customers by similarity in the prepared feature space.
-# MAGIC We compare `k=2`, `k=3`, and `k=4` to show that the number of segments is a modeling choice.
+# MAGIC We compare several values of `k` to show that the number of segments is a modeling choice.
 
 # COMMAND ----------
 
 # DBTITLE 1,Train models and compare k
-k_values = [2, 3, 4]
+k_values = [2, 3, 4, 5, 6, 7]
 model_selection_rows = []
 trained_pipelines = {}
 train_cluster_by_k = {}
@@ -224,10 +228,11 @@ for k in k_values:
     train_clusters = pipeline.fit_predict(X_train)
     X_prepared = pipeline.named_steps["preprocessor"].transform(X_train)
     score = silhouette_score(X_prepared, train_clusters)
+    inertia = pipeline.named_steps["kmeans"].inertia_
 
     trained_pipelines[k] = pipeline
     train_cluster_by_k[k] = train_clusters
-    model_selection_rows.append({"k": k, "silhouette_score": score})
+    model_selection_rows.append({"k": k, "silhouette_score": score, "inertia": inertia})
 
 model_selection_df = pd.DataFrame(model_selection_rows).sort_values("k")
 best_k = int(model_selection_df.loc[model_selection_df["silhouette_score"].idxmax(), "k"])
@@ -251,24 +256,28 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Pick a candidate k
+# MAGIC ## Compare silhouette and elbow
 # MAGIC
-# MAGIC The red line marks the best silhouette score. In a real CRM or BI setting, you would also inspect whether the
-# MAGIC segments are understandable, large enough, and useful for action.
+# MAGIC The silhouette plot marks the highest score. The elbow plot shows whether adding more clusters still gives a
+# MAGIC meaningful reduction in inertia.
+# MAGIC
+# MAGIC In a real CRM or BI setting, you would also inspect whether the segments are understandable, large enough,
+# MAGIC and useful for action.
 
 # COMMAND ----------
 
-# DBTITLE 1,Plot silhouette scores
+# DBTITLE 1,Plot silhouette and elbow
 sns.set_theme(style="whitegrid", context="talk")
-fig, ax = plt.subplots(figsize=(9, 5))
-sns.lineplot(data=model_selection_df, x="k", y="silhouette_score", marker="o", ax=ax, color="#0b5cad")
-ax.axvline(best_k, color="#d62728", linestyle="--", linewidth=1)
-ax.set_title("Silhouette score by number of clusters")
-ax.set_xlabel("Number of clusters (k)")
-ax.set_ylabel("Silhouette score")
-ax.set_xticks(k_values)
+fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+
+sns.lineplot(data=model_selection_df, x="k", y="silhouette_score", marker="o", ax=axes[0], color="#0b5cad")
+axes[0].axvline(best_k, color="#d62728", linestyle="--", linewidth=1)
+axes[0].set_title("Silhouette score")
+axes[0].set_xlabel("Number of clusters (k)")
+axes[0].set_ylabel("Silhouette score")
+axes[0].set_xticks(k_values)
 for _, row in model_selection_df.iterrows():
-    ax.annotate(
+    axes[0].annotate(
         f"{row['silhouette_score']:.3f}",
         (row["k"], row["silhouette_score"]),
         textcoords="offset points",
@@ -276,8 +285,15 @@ for _, row in model_selection_df.iterrows():
         ha="center",
         fontsize=10,
     )
+
+sns.lineplot(data=model_selection_df, x="k", y="inertia", marker="o", ax=axes[1], color="#2ca02c")
+axes[1].set_title("Elbow curve")
+axes[1].set_xlabel("Number of clusters (k)")
+axes[1].set_ylabel("Inertia")
+axes[1].set_xticks(k_values)
+
 plt.tight_layout()
-plt.savefig(outputs_figures / "silhouette_scores.png", dpi=160, bbox_inches="tight")
+plt.savefig(outputs_figures / "model_selection_silhouette_elbow.png", dpi=160, bbox_inches="tight")
 plt.show()
 
 print(f"Selected k by highest silhouette score: {best_k}")
@@ -532,8 +548,10 @@ plt.show()
 plot_x = "recency_days"
 plot_y = "monetary"
 
-fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
-for ax, k in zip(axes, k_values):
+plot_k_values = [2, 3, 4]
+
+fig, axes = plt.subplots(1, len(plot_k_values), figsize=(18, 5), sharey=True)
+for ax, k in zip(axes, plot_k_values):
     cluster_order = list(range(k))
     cluster_colors = dict(zip(cluster_order, sns.color_palette("tab10", k)))
 
@@ -575,7 +593,7 @@ for ax, k in zip(axes, k_values):
     ax.set_xlabel("Recency (days)")
 
 axes[0].set_ylabel("Monetary (log scale)")
-fig.suptitle("Clusters with inference points (X) for k = 2, 3, 4", fontsize=16)
+fig.suptitle("Clusters with inference points (X) for selected k values", fontsize=16)
 plt.tight_layout()
 plt.savefig(outputs_figures / "cluster_scatter_k234_with_inference.png", dpi=160, bbox_inches="tight")
 plt.show()
@@ -602,8 +620,8 @@ inference_pca_values = pca_model.transform(X_inference_prepared)
 train_pca_df = pd.DataFrame(train_pca_values, columns=["PC1", "PC2"])
 inference_pca_df = pd.DataFrame(inference_pca_values, columns=["PC1", "PC2"])
 
-fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharex=True, sharey=True)
-for ax, k in zip(axes, k_values):
+fig, axes = plt.subplots(1, len(plot_k_values), figsize=(18, 5), sharex=True, sharey=True)
+for ax, k in zip(axes, plot_k_values):
     cluster_order = list(range(k))
     cluster_colors = dict(zip(cluster_order, sns.color_palette("tab10", k)))
 
@@ -645,7 +663,7 @@ for ax, k in zip(axes, k_values):
     ax.set_xlabel("PCA component 1")
 
 axes[0].set_ylabel("PCA component 2")
-fig.suptitle("Clusters with inference points (X) in PCA space for k = 2, 3, 4", fontsize=16)
+fig.suptitle("Clusters with inference points (X) in PCA space for selected k values", fontsize=16)
 plt.tight_layout()
 plt.savefig(outputs_figures / "cluster_scatter_pca_k234_with_inference.png", dpi=160, bbox_inches="tight")
 plt.show()
