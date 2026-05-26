@@ -60,6 +60,15 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Check input quality
+# MAGIC
+# MAGIC Before building any model input, we check that the transaction table has the basics we need:
+# MAGIC customer id, country, and non-negative revenue. This is the same kind of sanity check you would do before
+# MAGIC building a BI dataset or semantic model.
+
+# COMMAND ----------
+
 # DBTITLE 1,Data quality check
 if spark_available:
     quality_df = spark.sql(f"""
@@ -89,6 +98,21 @@ if "display" in globals():
     display(quality_df)
 else:
     print(quality_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Build one row per customer
+# MAGIC
+# MAGIC The raw table has one row per transaction line. For segmentation we need one row per customer,
+# MAGIC because the model should compare customer behavior, not individual purchases.
+# MAGIC
+# MAGIC The features below are similar to a BI customer mart:
+# MAGIC
+# MAGIC - `recency_days`: days since the customer's last purchase
+# MAGIC - `frequency`: number of invoices
+# MAGIC - `monetary`: total revenue
+# MAGIC - basket and product features that describe how the customer buys
 
 # COMMAND ----------
 
@@ -213,6 +237,14 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Save the prepared training data
+# MAGIC
+# MAGIC Notebook 02 uses this customer-level dataset for training. We save it both as a Delta table and as a CSV copy.
+# MAGIC The CSV is practical for pandas/scikit-learn, while Delta keeps the Databricks workflow visible.
+
+# COMMAND ----------
+
 # DBTITLE 1,Save CSV copy for pandas workflow
 customer_features_csv = processed_path / "customer_enriched.csv"
 customer_features_pdf.to_csv(customer_features_csv, index=False)
@@ -236,6 +268,15 @@ if "display" in globals():
     display(missing_values_df)
 else:
     print(missing_values_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Explore feature relationships
+# MAGIC
+# MAGIC The heatmap shows which numeric features tend to move together. Strong correlation is not automatically bad,
+# MAGIC but it tells us that several columns may describe similar behavior. In the next notebook, changing the feature
+# MAGIC list changes what the clustering model considers "similar customers".
 
 # COMMAND ----------
 

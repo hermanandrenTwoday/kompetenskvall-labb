@@ -71,6 +71,14 @@ print(f"Using schema: {target_catalog}.{target_schema}" if target_catalog else "
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Read the customer training table
+# MAGIC
+# MAGIC The model trains on one row per customer from notebook 01. Each row describes behavior: how recent the customer is,
+# MAGIC how often they buy, how much they spend, and related basket metrics.
+
+# COMMAND ----------
+
 # DBTITLE 1,Read training data
 if target_catalog:
     train_df = spark.table(table_id("customer_enriched")).toPandas()
@@ -96,6 +104,9 @@ else:
 # MAGIC - close to `1.0`: clearer separation
 # MAGIC - close to `0.0`: overlapping clusters
 # MAGIC - below `0.0`: many points may be assigned poorly
+# MAGIC
+# MAGIC Treat it as a technical signal, not a final business answer. A slightly lower score can still be useful if the
+# MAGIC resulting segments are easier to act on.
 
 # COMMAND ----------
 
@@ -118,6 +129,19 @@ else:
 # MAGIC - `RegionGroup` - tests whether geography improves or distorts segmentation
 # MAGIC
 # MAGIC Change `use_extended_features` below and rerun the notebook. Compare silhouette score, cluster profiles, and inference points.
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Preprocess before clustering
+# MAGIC
+# MAGIC KMeans is distance-based. If we used raw values, large columns such as `monetary` would dominate smaller columns.
+# MAGIC The pipeline therefore:
+# MAGIC
+# MAGIC - fills missing numeric values with the median
+# MAGIC - applies `log1p` to reduce extreme retail skew
+# MAGIC - standardizes numeric columns to comparable scale
+# MAGIC - one-hot encodes category columns when extended features are enabled
 
 # COMMAND ----------
 
@@ -175,6 +199,14 @@ preprocessor = ColumnTransformer(
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Train several candidate clusterings
+# MAGIC
+# MAGIC There is no label column here. KMeans groups customers by similarity in the prepared feature space.
+# MAGIC We compare `k=2`, `k=3`, and `k=4` to show that the number of segments is a modeling choice.
+
+# COMMAND ----------
+
 # DBTITLE 1,Train models and compare k
 k_values = [2, 3, 4]
 model_selection_rows = []
@@ -218,6 +250,14 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Pick a candidate k
+# MAGIC
+# MAGIC The red line marks the best silhouette score. In a real CRM or BI setting, you would also inspect whether the
+# MAGIC segments are understandable, large enough, and useful for action.
+
+# COMMAND ----------
+
 # DBTITLE 1,Plot silhouette scores
 sns.set_theme(style="whitegrid", context="talk")
 fig, ax = plt.subplots(figsize=(9, 5))
@@ -241,6 +281,14 @@ plt.savefig(outputs_figures / "silhouette_scores.png", dpi=160, bbox_inches="tig
 plt.show()
 
 print(f"Selected k by highest silhouette score: {best_k}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Load customers for inference
+# MAGIC
+# MAGIC Inference means applying the trained pipeline to new customers. The important rule is that new customers must have
+# MAGIC the same feature columns as the training data. The pipeline handles missing values and scaling in the same way as during training.
 
 # COMMAND ----------
 
@@ -274,6 +322,7 @@ else:
 # MAGIC - extended feature set with basket, product, price, and region features
 # MAGIC
 # MAGIC It is meant as a quick check that feature choices can change segmentation.
+# MAGIC When features change, we change what "similar customer" means.
 
 # COMMAND ----------
 
@@ -355,6 +404,14 @@ print(f"Feature-set change moved {changed_count} of {len(feature_comparison_infe
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Predict clusters for new customers
+# MAGIC
+# MAGIC The numeric cluster id is not a business label. It only says which learned group the customer is closest to.
+# MAGIC We interpret the groups by looking at feature averages and plots below.
+
+# COMMAND ----------
+
 # DBTITLE 1,Predict clusters for new customers
 for k in k_values:
     inference_df[f"PredictedCluster_k{k}"] = trained_pipelines[k].predict(inference_df[feature_columns])
@@ -363,6 +420,14 @@ if "display" in globals():
     display(inference_df)
 else:
     print(inference_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Interpret clusters with profiles
+# MAGIC
+# MAGIC Cluster ids are arbitrary. To understand them, compare average behavior per cluster:
+# MAGIC recency, frequency, monetary value, and order value. This is the step where BI domain knowledge matters most.
 
 # COMMAND ----------
 
@@ -386,6 +451,14 @@ if "display" in globals():
     display(k3_profile_df)
 else:
     print(k3_profile_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Compare cluster behavior across more features
+# MAGIC
+# MAGIC The bars are indexed against the whole dataset. A value of `1.0` means the cluster is at the overall average.
+# MAGIC Values above or below `1.0` make it easier to describe the cluster in business language.
 
 # COMMAND ----------
 
@@ -446,6 +519,15 @@ plt.show()
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Plot clusters in business-friendly axes
+# MAGIC
+# MAGIC `recency_days` and `monetary` are easy to explain: how recently the customer bought, and how much they spent.
+# MAGIC The X markers are new inference customers. Because this is only a 2D view, overlapping points can still be separated
+# MAGIC by other features used by the model.
+
+# COMMAND ----------
+
 # DBTITLE 1,Cluster scatter plots with inference points
 plot_x = "recency_days"
 plot_y = "monetary"
@@ -497,6 +579,14 @@ fig.suptitle("Clusters with inference points (X) for k = 2, 3, 4", fontsize=16)
 plt.tight_layout()
 plt.savefig(outputs_figures / "cluster_scatter_k234_with_inference.png", dpi=160, bbox_inches="tight")
 plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## PCA view of the model space
+# MAGIC
+# MAGIC PCA compresses the prepared feature space into two dimensions. It is useful as a second view, but it is still a
+# MAGIC simplification. Use it to discuss structure, not as an exact map of the model.
 
 # COMMAND ----------
 
@@ -562,6 +652,14 @@ plt.show()
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Save results
+# MAGIC
+# MAGIC The outputs are written back to the lab folder so they can be inspected or downloaded:
+# MAGIC clustered training customers, inference results, model selection scores, figures, and the fitted pipeline.
+
+# COMMAND ----------
+
 # DBTITLE 1,Save outputs
 train_output_df.to_csv(outputs / "clustered_customers.csv", index=False)
 inference_df.to_csv(outputs / "inference_results.csv", index=False)
@@ -570,3 +668,14 @@ joblib.dump(trained_pipelines[best_k], models / "clustering_pipeline.joblib")
 
 print(f"Saved outputs to: {outputs}")
 print(f"Saved best pipeline, k={best_k}, to: {models / 'clustering_pipeline.joblib'}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Discussion prompts
+# MAGIC
+# MAGIC - Which `k` would you choose if this was a CRM segmentation case?
+# MAGIC - Which customers in the inference table should sales or marketing act on first?
+# MAGIC - Which extra features made the segments better or worse?
+# MAGIC - What data is missing for a more useful customer segmentation?
+# MAGIC - Are all clusters large and clear enough to be operationally useful?
