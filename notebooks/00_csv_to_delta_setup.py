@@ -1,9 +1,9 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 00 - CSV to Delta setup
+# MAGIC # 00 - CSV till Delta
 # MAGIC
-# MAGIC Run this first after uploading the project folder/zip to Databricks.
-# MAGIC It reads the CSV files in `data/raw` and creates Delta tables used by notebooks 01 and 02.
+# MAGIC Kör detta först efter att projektmappen/zippen har laddats upp till Databricks.
+# MAGIC Notebooken läser CSV-filerna i `data/raw` och skapar Delta-tabeller som används av notebook 01 och 02.
 
 # COMMAND ----------
 
@@ -13,7 +13,7 @@ import pandas as pd
 # COMMAND ----------
 
 def get_lab_root() -> Path:
-    """Resolve the uploaded lab root from the current notebook path."""
+    """Hitta den uppladdade labbroten från aktuell notebook-sökväg."""
     if "dbutils" in globals():
         notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
         workspace_path = Path(notebook_path)
@@ -25,14 +25,14 @@ def get_lab_root() -> Path:
 
 
 def pick_catalog(schema_name: str) -> str:
-    """Prefer the Databricks Free workspace catalog, fall back to hive_metastore."""
+    """Använd helst Databricks Free-katalogen workspace, annars hive_metastore."""
     for catalog_name in ["workspace", "hive_metastore"]:
         try:
             spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{catalog_name}`.`{schema_name}`")
             return catalog_name
         except Exception as exc:
-            print(f"Could not use catalog {catalog_name}: {exc}")
-    raise RuntimeError("No usable catalog found. Try creating a schema manually in Databricks first.")
+            print(f"Kunde inte använda catalog {catalog_name}: {exc}")
+    raise RuntimeError("Ingen användbar catalog hittades. Testa att skapa schema manuellt i Databricks först.")
 
 
 def table_id(catalog_name: str, schema_name: str, table_name: str) -> str:
@@ -45,12 +45,12 @@ target_schema = "kompetenskvall_labb"
 spark_available = "spark" in globals()
 target_catalog = pick_catalog(target_schema) if spark_available else None
 
-print(f"Lab root: {lab_root}")
-print(f"Raw CSV path: {raw_path}")
+print(f"Labbrot: {lab_root}")
+print(f"Sökväg till rå CSV-data: {raw_path}")
 if spark_available:
-    print(f"Target schema: {target_catalog}.{target_schema}")
+    print(f"Målschema: {target_catalog}.{target_schema}")
 else:
-    print("Spark is not available. Local run will validate CSV files only.")
+    print("Spark är inte tillgängligt. Lokal körning validerar bara CSV-filerna.")
 
 # COMMAND ----------
 
@@ -59,13 +59,13 @@ missing_files = [name for name in expected_files if not (raw_path / name).exists
 
 if missing_files:
     raise FileNotFoundError(
-        "Missing CSV files in data/raw: "
+        "Saknar CSV-filer i data/raw: "
         + ", ".join(missing_files)
-        + f"\nExpected folder: {raw_path}"
+        + f"\nFörväntad mapp: {raw_path}"
     )
 
 csv_files = sorted(raw_path.glob("*.csv"))
-print(f"Found {len(csv_files)} CSV file(s):")
+print(f"Hittade {len(csv_files)} CSV-fil(er):")
 for csv_file in csv_files:
     print(f"- {csv_file.name} ({csv_file.stat().st_size / (1024 * 1024):.2f} MB)")
 
@@ -85,7 +85,7 @@ for csv_file in csv_files:
                 "status": "validated_local_csv",
             }
         )
-        print(f"Validated {csv_file.name} ({row_count:,} rows)")
+        print(f"Validerade {csv_file.name} ({row_count:,} rader)")
         continue
 
     full_table_name = table_id(target_catalog, target_schema, table_name)
@@ -113,7 +113,7 @@ for csv_file in csv_files:
             "status": "created_or_replaced",
         }
     )
-    print(f"Created/replaced {target_catalog}.{target_schema}.{table_name} ({row_count:,} rows)")
+    print(f"Skapade/ersatte {target_catalog}.{target_schema}.{table_name} ({row_count:,} rader)")
 
 results_df = pd.DataFrame(results)
 if "display" in globals():

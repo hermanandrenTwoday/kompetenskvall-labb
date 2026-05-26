@@ -1,9 +1,9 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 02 - Train and infer
+# MAGIC # 02 - Träna och inferera
 # MAGIC
-# MAGIC This notebook expects notebook 01 to have created customer training data.
-# MAGIC It compares k=2,3,4, trains KMeans pipelines, and predicts clusters for new customers.
+# MAGIC Den här notebooken förväntar sig att notebook 01 har skapat träningsdata på kundnivå.
+# MAGIC Den jämför flera värden på `k`, tränar KMeans-pipelines och predikterar kluster för nya kunder.
 
 # COMMAND ----------
 
@@ -66,26 +66,26 @@ models.mkdir(parents=True, exist_ok=True)
 target_schema = "kompetenskvall_labb"
 target_catalog = resolve_catalog(target_schema)
 
-print(f"Lab root: {lab_root}")
-print(f"Using schema: {target_catalog}.{target_schema}" if target_catalog else "No Delta schema found; using CSV files.")
+print(f"Labbrot: {lab_root}")
+print(f"Använder schema: {target_catalog}.{target_schema}" if target_catalog else "Inget Delta-schema hittades; använder CSV-filer.")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Read the customer training table
+# MAGIC ## Läs träningsdata på kundnivå
 # MAGIC
-# MAGIC The model trains on one row per customer from notebook 01. Each row describes behavior: how recent the customer is,
-# MAGIC how often they buy, how much they spend, and related basket metrics.
+# MAGIC Modellen tränas på en rad per kund från notebook 01. Varje rad beskriver beteende:
+# MAGIC hur nylig kunden är, hur ofta kunden köper, hur mycket kunden spenderar och relaterade korgmått.
 
 # COMMAND ----------
 
-# DBTITLE 1,Read training data
+# DBTITLE 1,Läs träningsdata
 if target_catalog:
     train_df = spark.table(table_id("customer_enriched")).toPandas()
 else:
     train_csv = processed_path / "customer_enriched.csv"
     if not train_csv.exists():
-        raise FileNotFoundError(f"Missing {train_csv}. Run notebook 01 first.")
+        raise FileNotFoundError(f"Saknar {train_csv}. Kör notebook 01 först.")
     train_df = pd.read_csv(train_csv)
 
 train_df["last_purchase_date"] = pd.to_datetime(train_df["last_purchase_date"])
@@ -97,59 +97,59 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Silhouette score and elbow short explanation
+# MAGIC ## Kort förklaring av silhouette score och elbow
 # MAGIC
-# MAGIC Silhouette score measures how clearly one point belongs to its own cluster compared with the nearest other cluster.
+# MAGIC Silhouette score mäter hur tydligt en punkt hör till sitt eget kluster jämfört med närmaste andra kluster.
 # MAGIC
-# MAGIC - close to `1.0`: clearer separation
-# MAGIC - close to `0.0`: overlapping clusters
-# MAGIC - below `0.0`: many points may be assigned poorly
+# MAGIC - nära `1.0`: tydligare separation
+# MAGIC - nära `0.0`: kluster överlappar
+# MAGIC - under `0.0`: många punkter kan vara svagt placerade
 # MAGIC
-# MAGIC Treat it as a technical signal, not a final business answer. A slightly lower score can still be useful if the
-# MAGIC resulting segments are easier to act on.
+# MAGIC Se det som en teknisk signal, inte som ett slutligt affärssvar. Ett lite lägre värde kan fortfarande vara användbart
+# MAGIC om segmenten är enklare att förstå och agera på.
 # MAGIC
-# MAGIC The elbow method looks at inertia: how tightly points sit around their cluster centers. Inertia almost always
-# MAGIC improves when `k` increases, so we look for the point where improvement starts flattening out. That bend is the
-# MAGIC "elbow". It is also a guide, not a rule.
+# MAGIC Elbow-metoden tittar på inertia: hur tätt punkterna ligger runt sina klustercentrum. Inertia blir nästan alltid
+# MAGIC bättre när `k` ökar, så vi letar efter punkten där förbättringen börjar plana ut. Den böjen är "elbow".
+# MAGIC Även detta är en vägledning, inte en regel.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Lab exercise: choose features
+# MAGIC ## Labbövning: välj features
 # MAGIC
-# MAGIC The model starts with a simple RFM baseline:
+# MAGIC Modellen börjar med en enkel RFM-baseline:
 # MAGIC
 # MAGIC - `recency_days`
 # MAGIC - `frequency`
 # MAGIC - `monetary`
 # MAGIC
-# MAGIC Suggested features to try next:
+# MAGIC Föreslagna features att testa nästa:
 # MAGIC
-# MAGIC - `avg_order_value` - separates many small purchases from fewer large purchases
-# MAGIC - `basket_size` - captures total volume
-# MAGIC - `avg_items_per_invoice` - separates bulk buying from small baskets
-# MAGIC - `unique_products` - captures assortment breadth
-# MAGIC - `avg_unit_price` - captures premium vs low-price behavior
-# MAGIC - `RegionGroup` - tests whether geography improves or distorts segmentation
+# MAGIC - `avg_order_value` - skiljer många små köp från färre stora köp
+# MAGIC - `basket_size` - fångar total volym
+# MAGIC - `avg_items_per_invoice` - skiljer bulk-köp från små varukorgar
+# MAGIC - `unique_products` - fångar bredd i sortiment
+# MAGIC - `avg_unit_price` - fångar premiumbeteende jämfört med lågpris
+# MAGIC - `RegionGroup` - testar om geografi förbättrar eller stör segmenteringen
 # MAGIC
-# MAGIC Change `use_extended_features` below and rerun the notebook. Compare silhouette score, cluster profiles, and inference points.
+# MAGIC Ändra `use_extended_features` nedan och kör om notebooken. Jämför silhouette score, klusterprofiler och inference-punkter.
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Preprocess before clustering
+# MAGIC ## Förbehandla före klustring
 # MAGIC
-# MAGIC KMeans is distance-based. If we used raw values, large columns such as `monetary` would dominate smaller columns.
-# MAGIC The pipeline therefore:
+# MAGIC KMeans är avståndsbaserad. Om vi använde råa värden skulle stora kolumner som `monetary` dominera mindre kolumner.
+# MAGIC Pipelinen gör därför detta:
 # MAGIC
-# MAGIC - fills missing numeric values with the median
-# MAGIC - applies `log1p` to reduce extreme retail skew
-# MAGIC - standardizes numeric columns to comparable scale
-# MAGIC - one-hot encodes category columns when extended features are enabled
+# MAGIC - fyller saknade numeriska värden med median
+# MAGIC - använder `log1p` för att minska extrem retail-skevhet
+# MAGIC - standardiserar numeriska kolumner till jämförbar skala
+# MAGIC - one-hot-encodar kategorikolumner när extended features är aktiverade
 
 # COMMAND ----------
 
-# DBTITLE 1,Define preprocessing pipeline
+# DBTITLE 1,Definiera preprocessing-pipeline
 use_extended_features = False
 
 baseline_numeric_features = [
@@ -175,9 +175,9 @@ if use_extended_features:
 feature_columns = numeric_features + categorical_features
 X_train = train_df[feature_columns].copy()
 
-print("Feature mode:", "extended" if use_extended_features else "baseline")
-print("Numeric features:", numeric_features)
-print("Categorical features:", categorical_features)
+print("Featureläge:", "extended" if use_extended_features else "baseline")
+print("Numeriska features:", numeric_features)
+print("Kategoriska features:", categorical_features)
 
 numeric_pipeline = Pipeline(
     [
@@ -204,14 +204,14 @@ preprocessor = ColumnTransformer(
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Train several candidate clusterings
+# MAGIC ## Träna flera kandidater för klustring
 # MAGIC
-# MAGIC There is no label column here. KMeans groups customers by similarity in the prepared feature space.
-# MAGIC We compare several values of `k` to show that the number of segments is a modeling choice.
+# MAGIC Här finns ingen label-kolumn. KMeans grupperar kunder efter likhet i den förberedda feature-rymden.
+# MAGIC Vi jämför flera värden på `k` för att visa att antalet segment är ett modellval.
 
 # COMMAND ----------
 
-# DBTITLE 1,Train models and compare k
+# DBTITLE 1,Träna modeller och jämför k
 k_values = [2, 3, 4, 5, 6, 7]
 model_selection_rows = []
 trained_pipelines = {}
@@ -243,7 +243,7 @@ else:
 
 # COMMAND ----------
 
-# DBTITLE 1,Create output dataframe with cluster assignments
+# DBTITLE 1,Skapa output-dataframe med klustertilldelningar
 train_output_df = train_df.copy()
 for k in k_values:
     train_output_df[f"Cluster_k{k}"] = train_cluster_by_k[k]
@@ -256,24 +256,24 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Compare silhouette and elbow
+# MAGIC ## Jämför silhouette och elbow
 # MAGIC
-# MAGIC The silhouette plot marks the highest score. The elbow plot shows whether adding more clusters still gives a
-# MAGIC meaningful reduction in inertia.
+# MAGIC Silhouette-plotten markerar högsta värdet. Elbow-plotten visar om fler kluster fortfarande ger en
+# MAGIC meningsfull minskning av inertia.
 # MAGIC
-# MAGIC In a real CRM or BI setting, you would also inspect whether the segments are understandable, large enough,
-# MAGIC and useful for action.
+# MAGIC I ett verkligt CRM- eller BI-case skulle man också kontrollera om segmenten är begripliga, tillräckligt stora
+# MAGIC och användbara för åtgärder.
 
 # COMMAND ----------
 
-# DBTITLE 1,Plot silhouette and elbow
+# DBTITLE 1,Plotta silhouette och elbow
 sns.set_theme(style="whitegrid", context="talk")
 fig, axes = plt.subplots(1, 2, figsize=(15, 5))
 
 sns.lineplot(data=model_selection_df, x="k", y="silhouette_score", marker="o", ax=axes[0], color="#0b5cad")
 axes[0].axvline(best_k, color="#d62728", linestyle="--", linewidth=1)
 axes[0].set_title("Silhouette score")
-axes[0].set_xlabel("Number of clusters (k)")
+axes[0].set_xlabel("Antal kluster (k)")
 axes[0].set_ylabel("Silhouette score")
 axes[0].set_xticks(k_values)
 for _, row in model_selection_df.iterrows():
@@ -287,8 +287,8 @@ for _, row in model_selection_df.iterrows():
     )
 
 sns.lineplot(data=model_selection_df, x="k", y="inertia", marker="o", ax=axes[1], color="#2ca02c")
-axes[1].set_title("Elbow curve")
-axes[1].set_xlabel("Number of clusters (k)")
+axes[1].set_title("Elbow-kurva")
+axes[1].set_xlabel("Antal kluster (k)")
 axes[1].set_ylabel("Inertia")
 axes[1].set_xticks(k_values)
 
@@ -296,19 +296,19 @@ plt.tight_layout()
 plt.savefig(outputs_figures / "model_selection_silhouette_elbow.png", dpi=160, bbox_inches="tight")
 plt.show()
 
-print(f"Selected k by highest silhouette score: {best_k}")
+print(f"Valt k enligt högst silhouette score: {best_k}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Load customers for inference
+# MAGIC ## Läs in kunder för inference
 # MAGIC
-# MAGIC Inference means applying the trained pipeline to new customers. The important rule is that new customers must have
-# MAGIC the same feature columns as the training data. The pipeline handles missing values and scaling in the same way as during training.
+# MAGIC Inference betyder att vi använder den tränade pipelinen på nya kunder. Den viktiga regeln är att nya kunder måste ha
+# MAGIC samma feature-kolumner som träningsdatan. Pipelinen hanterar saknade värden och skalning på samma sätt som vid träning.
 
 # COMMAND ----------
 
-# DBTITLE 1,Read new customers and regions
+# DBTITLE 1,Läs in nya kunder och regioner
 if target_catalog:
     new_customers_df = spark.table(table_id("new_customers")).toPandas()
     regions_df = spark.table(table_id("regions")).toPandas()
@@ -330,19 +330,19 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Quick comparison: baseline vs extended features
+# MAGIC ## Snabb jämförelse: baseline vs extended features
 # MAGIC
-# MAGIC This comparison trains the same `k=3` model twice:
+# MAGIC Den här jämförelsen tränar samma `k=3`-modell två gånger:
 # MAGIC
-# MAGIC - baseline RFM features
-# MAGIC - extended feature set with basket, product, price, and region features
+# MAGIC - baseline med RFM-features
+# MAGIC - utökad feature-uppsättning med korg-, produkt-, pris- och regionfeatures
 # MAGIC
-# MAGIC It is meant as a quick check that feature choices can change segmentation.
-# MAGIC When features change, we change what "similar customer" means.
+# MAGIC Poängen är att snabbt visa att feature-val kan ändra segmenteringen.
+# MAGIC När features ändras ändrar vi också vad "liknande kund" betyder.
 
 # COMMAND ----------
 
-# DBTITLE 1,Compare baseline and extended feature sets for k=3
+# DBTITLE 1,Jämför baseline och utökad feature-uppsättning för k=3
 feature_sets = {
     "baseline_rfm": {
         "numeric": baseline_numeric_features,
@@ -416,19 +416,19 @@ else:
     print(feature_comparison_inference_df)
 
 changed_count = int(feature_comparison_inference_df["changed"].sum())
-print(f"Feature-set change moved {changed_count} of {len(feature_comparison_inference_df)} inference customers for k=3.")
+print(f"Feature-valet flyttade {changed_count} av {len(feature_comparison_inference_df)} inference-kunder för k=3.")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Predict clusters for new customers
+# MAGIC ## Prediktera kluster för nya kunder
 # MAGIC
-# MAGIC The numeric cluster id is not a business label. It only says which learned group the customer is closest to.
-# MAGIC We interpret the groups by looking at feature averages and plots below.
+# MAGIC Det numeriska kluster-id:t är inte en affärsetikett. Det säger bara vilken inlärd grupp kunden ligger närmast.
+# MAGIC Vi tolkar grupperna genom att titta på feature-medelvärden och plottar nedan.
 
 # COMMAND ----------
 
-# DBTITLE 1,Predict clusters for new customers
+# DBTITLE 1,Prediktera kluster för nya kunder
 for k in k_values:
     inference_df[f"PredictedCluster_k{k}"] = trained_pipelines[k].predict(inference_df[feature_columns])
 
@@ -440,14 +440,14 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Interpret clusters with profiles
+# MAGIC ## Tolka kluster med profiler
 # MAGIC
-# MAGIC Cluster ids are arbitrary. To understand them, compare average behavior per cluster:
-# MAGIC recency, frequency, monetary value, and order value. This is the step where BI domain knowledge matters most.
+# MAGIC Kluster-id:n är godtyckliga. För att förstå dem jämför vi genomsnittligt beteende per kluster:
+# MAGIC recency, frequency, monetary value och order value. Det här är steget där BI-domänkunskap är viktigast.
 
 # COMMAND ----------
 
-# DBTITLE 1,Cluster profile for k=3
+# DBTITLE 1,Klusterprofil för k=3
 k3_profile_df = (
     train_output_df.groupby("Cluster_k3")
     .agg(
@@ -471,14 +471,14 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Compare cluster behavior across more features
+# MAGIC ## Jämför klusterbeteende över fler features
 # MAGIC
-# MAGIC The bars are indexed against the whole dataset. A value of `1.0` means the cluster is at the overall average.
-# MAGIC Values above or below `1.0` make it easier to describe the cluster in business language.
+# MAGIC Staplarna är indexerade mot hela datasetet. Värdet `1.0` betyder att klustret ligger på totalgenomsnittet.
+# MAGIC Värden över eller under `1.0` gör det enklare att beskriva klustret på affärsspråk.
 
 # COMMAND ----------
 
-# DBTITLE 1,Extended cluster profile visualization
+# DBTITLE 1,Utökad visualisering av klusterprofil
 k3_extended_profile_df = (
     train_output_df.groupby("Cluster_k3")
     .agg(
@@ -503,10 +503,10 @@ plot_features = [
 feature_label_map = {
     "frequency": "Frequency",
     "monetary": "Monetary",
-    "avg_order_value": "Avg order value",
-    "basket_size": "Basket size",
-    "unique_products": "Unique products",
-    "avg_items_per_invoice": "Avg items/invoice",
+    "avg_order_value": "Snittvärde per order",
+    "basket_size": "Korgstorlek",
+    "unique_products": "Unika produkter",
+    "avg_items_per_invoice": "Snittartiklar per faktura",
 }
 
 k3_relative_df = k3_extended_profile_df[plot_features].div(train_output_df[plot_features].mean(), axis=1)
@@ -524,11 +524,11 @@ sns.barplot(
     palette="tab10",
 )
 plt.axhline(1.0, color="black", linestyle="--", linewidth=1)
-plt.title("k=3 cluster profile across multiple features (index vs total)")
+plt.title("k=3-klusterprofil över flera features (index mot total)")
 plt.xlabel("Feature")
-plt.ylabel("Relative index (1.0 = overall mean)")
+plt.ylabel("Relativt index (1.0 = totalgenomsnitt)")
 plt.xticks(rotation=20, ha="right")
-plt.legend(title="Cluster", loc="upper right")
+plt.legend(title="Kluster", loc="upper right")
 plt.tight_layout()
 plt.savefig(outputs_figures / "k3_cluster_feature_bars.png", dpi=160, bbox_inches="tight")
 plt.show()
@@ -536,15 +536,15 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Plot clusters in business-friendly axes
+# MAGIC ## Plotta kluster i affärsnära axlar
 # MAGIC
-# MAGIC `recency_days` and `monetary` are easy to explain: how recently the customer bought, and how much they spent.
-# MAGIC The X markers are new inference customers. Because this is only a 2D view, overlapping points can still be separated
-# MAGIC by other features used by the model.
+# MAGIC `recency_days` och `monetary` är enkla att förklara: hur nyligen kunden köpte och hur mycket kunden spenderade.
+# MAGIC X-markeringarna är nya inference-kunder. Eftersom detta bara är en 2D-vy kan överlappande punkter fortfarande
+# MAGIC separeras av andra features som modellen använder.
 
 # COMMAND ----------
 
-# DBTITLE 1,Cluster scatter plots with inference points
+# DBTITLE 1,Scatterplots med kluster och inference-punkter
 plot_x = "recency_days"
 plot_y = "monetary"
 
@@ -590,10 +590,10 @@ for ax, k in zip(axes, plot_k_values):
 
     ax.set_yscale("log")
     ax.set_title(f"k = {k}")
-    ax.set_xlabel("Recency (days)")
+    ax.set_xlabel("Recency (dagar)")
 
-axes[0].set_ylabel("Monetary (log scale)")
-fig.suptitle("Clusters with inference points (X) for selected k values", fontsize=16)
+axes[0].set_ylabel("Monetary (log-skala)")
+fig.suptitle("Kluster med inference-punkter (X) för valda k-värden", fontsize=16)
 plt.tight_layout()
 plt.savefig(outputs_figures / "cluster_scatter_k234_with_inference.png", dpi=160, bbox_inches="tight")
 plt.show()
@@ -601,14 +601,14 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## PCA view of the model space
+# MAGIC ## PCA-vy av modellens feature-rymd
 # MAGIC
-# MAGIC PCA compresses the prepared feature space into two dimensions. It is useful as a second view, but it is still a
-# MAGIC simplification. Use it to discuss structure, not as an exact map of the model.
+# MAGIC PCA komprimerar den förberedda feature-rymden till två dimensioner. Det är användbart som en andra vy,
+# MAGIC men det är fortfarande en förenkling. Använd den för att diskutera struktur, inte som en exakt karta över modellen.
 
 # COMMAND ----------
 
-# DBTITLE 1,PCA visualization with inference points
+# DBTITLE 1,PCA-visualisering med inference-punkter
 best_preprocessor = trained_pipelines[best_k].named_steps["preprocessor"]
 X_train_prepared = best_preprocessor.transform(X_train)
 X_inference_prepared = best_preprocessor.transform(inference_df[feature_columns])
@@ -660,10 +660,10 @@ for ax, k in zip(axes, plot_k_values):
     )
 
     ax.set_title(f"k = {k}")
-    ax.set_xlabel("PCA component 1")
+    ax.set_xlabel("PCA-komponent 1")
 
-axes[0].set_ylabel("PCA component 2")
-fig.suptitle("Clusters with inference points (X) in PCA space for selected k values", fontsize=16)
+axes[0].set_ylabel("PCA-komponent 2")
+fig.suptitle("Kluster med inference-punkter (X) i PCA-rymd för valda k-värden", fontsize=16)
 plt.tight_layout()
 plt.savefig(outputs_figures / "cluster_scatter_pca_k234_with_inference.png", dpi=160, bbox_inches="tight")
 plt.show()
@@ -671,29 +671,29 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Save results
+# MAGIC ## Spara resultat
 # MAGIC
-# MAGIC The outputs are written back to the lab folder so they can be inspected or downloaded:
-# MAGIC clustered training customers, inference results, model selection scores, figures, and the fitted pipeline.
+# MAGIC Utdata skrivs tillbaka till labbmappen så att det kan inspekteras eller laddas ner:
+# MAGIC klustrade träningskunder, inference-resultat, modellvalsvärden, figurer och den tränade pipelinen.
 
 # COMMAND ----------
 
-# DBTITLE 1,Save outputs
+# DBTITLE 1,Spara utdata
 train_output_df.to_csv(outputs / "clustered_customers.csv", index=False)
 inference_df.to_csv(outputs / "inference_results.csv", index=False)
 model_selection_df.to_csv(outputs / "model_selection.csv", index=False)
 joblib.dump(trained_pipelines[best_k], models / "clustering_pipeline.joblib")
 
-print(f"Saved outputs to: {outputs}")
-print(f"Saved best pipeline, k={best_k}, to: {models / 'clustering_pipeline.joblib'}")
+print(f"Sparade output till: {outputs}")
+print(f"Sparade bästa pipeline, k={best_k}, till: {models / 'clustering_pipeline.joblib'}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Discussion prompts
+# MAGIC ## Diskussionsfrågor
 # MAGIC
-# MAGIC - Which `k` would you choose if this was a CRM segmentation case?
-# MAGIC - Which customers in the inference table should sales or marketing act on first?
-# MAGIC - Which extra features made the segments better or worse?
-# MAGIC - What data is missing for a more useful customer segmentation?
-# MAGIC - Are all clusters large and clear enough to be operationally useful?
+# MAGIC - Vilket `k` skulle du välja om detta var ett CRM-segmenteringscase?
+# MAGIC - Vilka kunder i inference-tabellen borde sälj eller marknad agera på först?
+# MAGIC - Vilka extra features gjorde segmenten bättre eller sämre?
+# MAGIC - Vilken data saknas för en mer användbar kundsegmentering?
+# MAGIC - Är alla kluster tillräckligt stora och tydliga för att vara operationellt användbara?

@@ -1,9 +1,9 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # 01 - Prepare and explore
+# MAGIC # 01 - Förbered och utforska
 # MAGIC
-# MAGIC This notebook expects notebook 00 to have created raw Delta tables.
-# MAGIC It builds customer-level training data, saves it as Delta, and writes a local CSV for notebook 02.
+# MAGIC Den här notebooken förväntar sig att notebook 00 har skapat råa Delta-tabeller.
+# MAGIC Den bygger träningsdata på kundnivå, sparar resultatet som Delta och skriver en lokal CSV-kopia för notebook 02.
 
 # COMMAND ----------
 
@@ -32,7 +32,7 @@ def resolve_catalog(schema_name: str) -> str:
             return catalog_name
         except Exception:
             pass
-    raise RuntimeError("Could not find schema. Run notebook 00 first.")
+    raise RuntimeError("Kunde inte hitta schema. Kör notebook 00 först.")
 
 
 def table_id(table_name: str) -> str:
@@ -52,24 +52,24 @@ target_schema = "kompetenskvall_labb"
 spark_available = "spark" in globals()
 target_catalog = resolve_catalog(target_schema) if spark_available else None
 
-print(f"Lab root: {lab_root}")
+print(f"Labbrot: {lab_root}")
 if spark_available:
-    print(f"Using schema: {target_catalog}.{target_schema}")
+    print(f"Använder schema: {target_catalog}.{target_schema}")
 else:
-    print("Spark is not available. Using local CSV fallback.")
+    print("Spark är inte tillgängligt. Använder lokal CSV-fallback.")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Check input quality
+# MAGIC ## Kontrollera datakvalitet
 # MAGIC
-# MAGIC Before building any model input, we check that the transaction table has the basics we need:
-# MAGIC customer id, country, and non-negative revenue. This is the same kind of sanity check you would do before
-# MAGIC building a BI dataset or semantic model.
+# MAGIC Innan vi bygger modellinput kontrollerar vi att transaktionstabellen har grunderna vi behöver:
+# MAGIC kund-id, land och icke-negativ intäkt. Det är samma typ av rimlighetskontroll som man gör innan
+# MAGIC man bygger en BI-datamängd eller semantisk modell.
 
 # COMMAND ----------
 
-# DBTITLE 1,Data quality check
+# DBTITLE 1,Datakvalitetskontroll
 if spark_available:
     quality_df = spark.sql(f"""
         SELECT
@@ -102,21 +102,21 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Build one row per customer
+# MAGIC ## Bygg en rad per kund
 # MAGIC
-# MAGIC The raw table has one row per transaction line. For segmentation we need one row per customer,
-# MAGIC because the model should compare customer behavior, not individual purchases.
+# MAGIC Råtabellen har en rad per transaktionsrad. För segmentering behöver vi en rad per kund,
+# MAGIC eftersom modellen ska jämföra kundbeteende och inte enskilda köp.
 # MAGIC
-# MAGIC The features below are similar to a BI customer mart:
+# MAGIC Features nedan liknar en kundmart i BI:
 # MAGIC
-# MAGIC - `recency_days`: days since the customer's last purchase
-# MAGIC - `frequency`: number of invoices
-# MAGIC - `monetary`: total revenue
-# MAGIC - basket and product features that describe how the customer buys
+# MAGIC - `recency_days`: antal dagar sedan kundens senaste köp
+# MAGIC - `frequency`: antal fakturor
+# MAGIC - `monetary`: total intäkt
+# MAGIC - korg- och produktfeatures som beskriver hur kunden köper
 
 # COMMAND ----------
 
-# DBTITLE 1,Build customer features
+# DBTITLE 1,Bygg kundfeatures
 if spark_available:
     customer_features_df = spark.sql(f"""
     WITH cleaned AS (
@@ -168,7 +168,7 @@ if spark_available:
     )
 
     customer_count = customer_features_df.count()
-    print(f"Saved {customer_count:,} customers to {target_catalog}.{target_schema}.customer_enriched")
+    print(f"Sparade {customer_count:,} kunder till {target_catalog}.{target_schema}.customer_enriched")
     customer_features_pdf = customer_features_df.toPandas()
 else:
     regions_pdf = pd.read_csv(raw_path / "regions.csv")
@@ -233,23 +233,23 @@ else:
             "avg_unit_price": 2,
         }
     )
-    print(f"Built {len(customer_features_pdf):,} customers from local CSV files")
+    print(f"Byggde {len(customer_features_pdf):,} kunder från lokala CSV-filer")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Save the prepared training data
+# MAGIC ## Spara färdig träningsdata
 # MAGIC
-# MAGIC Notebook 02 uses this customer-level dataset for training. We save it both as a Delta table and as a CSV copy.
-# MAGIC The CSV is practical for pandas/scikit-learn, while Delta keeps the Databricks workflow visible.
+# MAGIC Notebook 02 använder den här kundnivåtabellen för träning. Vi sparar den både som Delta-tabell och som CSV-kopia.
+# MAGIC CSV är praktiskt för pandas/scikit-learn, medan Delta gör Databricks-flödet tydligt.
 
 # COMMAND ----------
 
-# DBTITLE 1,Save CSV copy for pandas workflow
+# DBTITLE 1,Spara CSV-kopia för pandas-flödet
 customer_features_csv = processed_path / "customer_enriched.csv"
 customer_features_pdf.to_csv(customer_features_csv, index=False)
 
-print(f"Saved CSV copy to: {customer_features_csv}")
+print(f"Sparade CSV-kopia till: {customer_features_csv}")
 if "display" in globals():
     display(customer_features_pdf.head())
 else:
@@ -272,11 +272,11 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Explore feature relationships
+# MAGIC ## Utforska relationer mellan features
 # MAGIC
-# MAGIC The heatmap shows which numeric features tend to move together. Strong correlation is not automatically bad,
-# MAGIC but it tells us that several columns may describe similar behavior. In the next notebook, changing the feature
-# MAGIC list changes what the clustering model considers "similar customers".
+# MAGIC Heatmapen visar vilka numeriska features som tenderar att röra sig tillsammans. Stark korrelation är inte automatiskt dåligt,
+# MAGIC men det säger att flera kolumner kan beskriva liknande beteende. I nästa notebook ändrar feature-listan vad
+# MAGIC klustringsmodellen betraktar som "liknande kunder".
 
 # COMMAND ----------
 
@@ -294,7 +294,7 @@ numeric_features = [
 plt.figure(figsize=(10, 8))
 corr_matrix = customer_features_pdf[numeric_features].corr()
 sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", center=0)
-plt.title("Feature Correlation Matrix")
+plt.title("Korrelationsmatris för features")
 plt.tight_layout()
 plt.savefig(outputs_figures / "correlation_heatmap.png", dpi=100, bbox_inches="tight")
 plt.show()
@@ -302,7 +302,7 @@ plt.show()
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Output from notebook 01:
-# MAGIC - Delta table: `kompetenskvall_labb.customer_enriched`
-# MAGIC - CSV file: `data/processed/customer_enriched.csv`
-# MAGIC - Figure: `outputs/figures/correlation_heatmap.png`
+# MAGIC Utdata från notebook 01:
+# MAGIC - Delta-tabell: `kompetenskvall_labb.customer_enriched`
+# MAGIC - CSV-fil: `data/processed/customer_enriched.csv`
+# MAGIC - Figur: `outputs/figures/correlation_heatmap.png`
