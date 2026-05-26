@@ -7,6 +7,10 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install -q "threadpoolctl>=3.5.0"
+
+# COMMAND ----------
+
 from pathlib import Path
 import joblib
 import numpy as np
