@@ -265,6 +265,96 @@ else:
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Quick comparison: baseline vs extended features
+# MAGIC
+# MAGIC This comparison trains the same `k=3` model twice:
+# MAGIC
+# MAGIC - baseline RFM features
+# MAGIC - extended feature set with basket, product, price, and region features
+# MAGIC
+# MAGIC It is meant as a quick check that feature choices can change segmentation.
+
+# COMMAND ----------
+
+# DBTITLE 1,Compare baseline and extended feature sets for k=3
+feature_sets = {
+    "baseline_rfm": {
+        "numeric": baseline_numeric_features,
+        "categorical": [],
+    },
+    "extended": {
+        "numeric": baseline_numeric_features + suggested_numeric_features,
+        "categorical": ["RegionGroup"],
+    },
+}
+
+comparison_rows = []
+comparison_predictions = {}
+
+for feature_set_name, feature_set in feature_sets.items():
+    comparison_numeric_features = feature_set["numeric"]
+    comparison_categorical_features = feature_set["categorical"]
+    comparison_feature_columns = comparison_numeric_features + comparison_categorical_features
+
+    comparison_transformers = [
+        ("num", numeric_pipeline, comparison_numeric_features),
+    ]
+    if comparison_categorical_features:
+        comparison_transformers.append(("cat", categorical_pipeline, comparison_categorical_features))
+
+    comparison_preprocessor = ColumnTransformer(comparison_transformers)
+    comparison_pipeline = Pipeline(
+        [
+            ("preprocessor", comparison_preprocessor),
+            ("kmeans", KMeans(n_clusters=3, random_state=42, n_init=20)),
+        ]
+    )
+
+    comparison_X_train = train_df[comparison_feature_columns].copy()
+    comparison_clusters = comparison_pipeline.fit_predict(comparison_X_train)
+    comparison_X_prepared = comparison_pipeline.named_steps["preprocessor"].transform(comparison_X_train)
+    comparison_score = silhouette_score(comparison_X_prepared, comparison_clusters)
+
+    comparison_rows.append(
+        {
+            "feature_set": feature_set_name,
+            "feature_count": len(comparison_feature_columns),
+            "silhouette_score_k3": comparison_score,
+            "cluster_counts": ", ".join(
+                f"{cluster_id}: {count}"
+                for cluster_id, count in pd.Series(comparison_clusters).value_counts().sort_index().items()
+            ),
+        }
+    )
+    comparison_predictions[feature_set_name] = comparison_pipeline.predict(
+        inference_df[comparison_feature_columns]
+    )
+
+feature_comparison_df = pd.DataFrame(comparison_rows)
+if "display" in globals():
+    display(feature_comparison_df)
+else:
+    print(feature_comparison_df)
+
+feature_comparison_inference_df = inference_df[["CustomerID", "Country"]].copy()
+feature_comparison_inference_df["baseline_rfm_k3"] = comparison_predictions["baseline_rfm"]
+feature_comparison_inference_df["extended_k3"] = comparison_predictions["extended"]
+feature_comparison_inference_df["changed"] = (
+    feature_comparison_inference_df["baseline_rfm_k3"]
+    != feature_comparison_inference_df["extended_k3"]
+)
+
+if "display" in globals():
+    display(feature_comparison_inference_df)
+else:
+    print(feature_comparison_inference_df)
+
+changed_count = int(feature_comparison_inference_df["changed"].sum())
+print(f"Feature-set change moved {changed_count} of {len(feature_comparison_inference_df)} inference customers for k=3.")
+
+# COMMAND ----------
+
 # DBTITLE 1,Predict clusters for new customers
 for k in k_values:
     inference_df[f"PredictedCluster_k{k}"] = trained_pipelines[k].predict(inference_df[feature_columns])
