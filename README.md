@@ -20,6 +20,16 @@ Ladda upp projektet som en zip i Databricks Free och kor notebooksen i ordning:
 - val av antal kluster med silhouette score
 - inference pa nya kunder med samma pipeline
 
+## Ovninsmoment i notebook 02
+
+Notebook 02 startar med en enkel RFM-baseline:
+
+- `recency_days`
+- `frequency`
+- `monetary`
+
+Deltagarna kan sedan sla pa fler foreslagna features i notebooken och jamfora silhouette score, klusterprofil och inference-resultat.
+
 ## Repo-struktur
 
 - `data/raw/transactions.csv` - raa transaktioner

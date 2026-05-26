@@ -14,14 +14,14 @@ import pandas as pd
 
 def get_lab_root() -> Path:
     """Resolve the uploaded lab root from the current notebook path."""
-    try:
+    if "dbutils" in globals():
         notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
         workspace_path = Path(notebook_path)
         if not str(workspace_path).startswith("/Workspace/"):
             workspace_path = Path("/Workspace") / str(workspace_path).lstrip("/")
         return workspace_path.parent.parent
-    except Exception:
-        return Path.cwd().parent
+
+    return Path(__file__).resolve().parent.parent
 
 
 def pick_catalog(schema_name: str) -> str:
@@ -42,11 +42,15 @@ def table_id(catalog_name: str, schema_name: str, table_name: str) -> str:
 lab_root = get_lab_root()
 raw_path = lab_root / "data" / "raw"
 target_schema = "kompetenskvall_labb"
-target_catalog = pick_catalog(target_schema)
+spark_available = "spark" in globals()
+target_catalog = pick_catalog(target_schema) if spark_available else None
 
 print(f"Lab root: {lab_root}")
 print(f"Raw CSV path: {raw_path}")
-print(f"Target schema: {target_catalog}.{target_schema}")
+if spark_available:
+    print(f"Target schema: {target_catalog}.{target_schema}")
+else:
+    print("Spark is not available. Local run will validate CSV files only.")
 
 # COMMAND ----------
 
@@ -71,6 +75,19 @@ results = []
 
 for csv_file in csv_files:
     table_name = csv_file.stem.lower()
+    if not spark_available:
+        row_count = sum(1 for _ in csv_file.open("r", encoding="utf-8")) - 1
+        results.append(
+            {
+                "file": csv_file.name,
+                "table": None,
+                "rows": row_count,
+                "status": "validated_local_csv",
+            }
+        )
+        print(f"Validated {csv_file.name} ({row_count:,} rows)")
+        continue
+
     full_table_name = table_id(target_catalog, target_schema, table_name)
 
     df = (
@@ -99,8 +116,12 @@ for csv_file in csv_files:
     print(f"Created/replaced {target_catalog}.{target_schema}.{table_name} ({row_count:,} rows)")
 
 results_df = pd.DataFrame(results)
-display(results_df)
+if "display" in globals():
+    display(results_df)
+else:
+    print(results_df)
 
 # COMMAND ----------
 
-spark.sql(f"SHOW TABLES IN `{target_catalog}`.`{target_schema}`")
+if spark_available:
+    spark.sql(f"SHOW TABLES IN `{target_catalog}`.`{target_schema}`")

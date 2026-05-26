@@ -24,14 +24,14 @@ from sklearn.metrics import silhouette_score
 # COMMAND ----------
 
 def get_lab_root() -> Path:
-    try:
+    if "dbutils" in globals():
         notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
         workspace_path = Path(notebook_path)
         if not str(workspace_path).startswith("/Workspace/"):
             workspace_path = Path("/Workspace") / str(workspace_path).lstrip("/")
         return workspace_path.parent.parent
-    except Exception:
-        return Path.cwd().parent
+
+    return Path(__file__).resolve().parent.parent
 
 
 def resolve_catalog(schema_name: str) -> str | None:
@@ -77,7 +77,10 @@ else:
     train_df = pd.read_csv(train_csv)
 
 train_df["last_purchase_date"] = pd.to_datetime(train_df["last_purchase_date"])
-display(train_df.head())
+if "display" in globals():
+    display(train_df.head())
+else:
+    print(train_df.head())
 
 # COMMAND ----------
 
@@ -92,20 +95,57 @@ display(train_df.head())
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Lab exercise: choose features
+# MAGIC
+# MAGIC The model starts with a simple RFM baseline:
+# MAGIC
+# MAGIC - `recency_days`
+# MAGIC - `frequency`
+# MAGIC - `monetary`
+# MAGIC
+# MAGIC Suggested features to try next:
+# MAGIC
+# MAGIC - `avg_order_value` - separates many small purchases from fewer large purchases
+# MAGIC - `basket_size` - captures total volume
+# MAGIC - `avg_items_per_invoice` - separates bulk buying from small baskets
+# MAGIC - `unique_products` - captures assortment breadth
+# MAGIC - `avg_unit_price` - captures premium vs low-price behavior
+# MAGIC - `RegionGroup` - tests whether geography improves or distorts segmentation
+# MAGIC
+# MAGIC Change `use_extended_features` below and rerun the notebook. Compare silhouette score, cluster profiles, and inference points.
+
+# COMMAND ----------
+
 # DBTITLE 1,Define preprocessing pipeline
-numeric_features = [
+use_extended_features = False
+
+baseline_numeric_features = [
     "recency_days",
     "frequency",
     "monetary",
+]
+suggested_numeric_features = [
     "avg_order_value",
     "basket_size",
     "avg_items_per_invoice",
     "unique_products",
     "avg_unit_price",
 ]
-categorical_features = ["RegionGroup"]
+
+numeric_features = baseline_numeric_features.copy()
+categorical_features = []
+
+if use_extended_features:
+    numeric_features = baseline_numeric_features + suggested_numeric_features
+    categorical_features = ["RegionGroup"]
+
 feature_columns = numeric_features + categorical_features
 X_train = train_df[feature_columns].copy()
+
+print("Feature mode:", "extended" if use_extended_features else "baseline")
+print("Numeric features:", numeric_features)
+print("Categorical features:", categorical_features)
 
 numeric_pipeline = Pipeline(
     [
@@ -155,7 +195,10 @@ for k in k_values:
 
 model_selection_df = pd.DataFrame(model_selection_rows).sort_values("k")
 best_k = int(model_selection_df.loc[model_selection_df["silhouette_score"].idxmax(), "k"])
-display(model_selection_df)
+if "display" in globals():
+    display(model_selection_df)
+else:
+    print(model_selection_df)
 
 # COMMAND ----------
 
@@ -164,7 +207,10 @@ train_output_df = train_df.copy()
 for k in k_values:
     train_output_df[f"Cluster_k{k}"] = train_cluster_by_k[k]
 
-display(train_output_df.head())
+if "display" in globals():
+    display(train_output_df.head())
+else:
+    print(train_output_df.head())
 
 # COMMAND ----------
 
@@ -208,7 +254,10 @@ inference_df = new_customers_df.merge(
     how="left",
 )
 inference_df["RegionGroup"] = inference_df["RegionGroup"].fillna("Other")
-display(inference_df)
+if "display" in globals():
+    display(inference_df)
+else:
+    print(inference_df)
 
 # COMMAND ----------
 
@@ -216,7 +265,10 @@ display(inference_df)
 for k in k_values:
     inference_df[f"PredictedCluster_k{k}"] = trained_pipelines[k].predict(inference_df[feature_columns])
 
-display(inference_df)
+if "display" in globals():
+    display(inference_df)
+else:
+    print(inference_df)
 
 # COMMAND ----------
 
@@ -236,7 +288,10 @@ k3_profile_df["share_of_customers"] = (k3_profile_df["customers"] / len(train_ou
 k3_profile_df = k3_profile_df[
     ["customers", "share_of_customers", "recency_mean", "frequency_mean", "monetary_mean", "avg_order_value_mean"]
 ]
-display(k3_profile_df)
+if "display" in globals():
+    display(k3_profile_df)
+else:
+    print(k3_profile_df)
 
 # COMMAND ----------
 

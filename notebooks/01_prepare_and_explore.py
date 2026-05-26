@@ -15,14 +15,14 @@ import matplotlib.pyplot as plt
 # COMMAND ----------
 
 def get_lab_root() -> Path:
-    try:
+    if "dbutils" in globals():
         notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
         workspace_path = Path(notebook_path)
         if not str(workspace_path).startswith("/Workspace/"):
             workspace_path = Path("/Workspace") / str(workspace_path).lstrip("/")
         return workspace_path.parent.parent
-    except Exception:
-        return Path.cwd().parent
+
+    return Path(__file__).resolve().parent.parent
 
 
 def resolve_catalog(schema_name: str) -> str:
@@ -40,6 +40,7 @@ def table_id(table_name: str) -> str:
 
 
 lab_root = get_lab_root()
+raw_path = lab_root / "data" / "raw"
 outputs = lab_root / "outputs"
 outputs_figures = outputs / "figures"
 processed_path = lab_root / "data" / "processed"
@@ -48,46 +49,72 @@ outputs_figures.mkdir(parents=True, exist_ok=True)
 processed_path.mkdir(parents=True, exist_ok=True)
 
 target_schema = "kompetenskvall_labb"
-target_catalog = resolve_catalog(target_schema)
+spark_available = "spark" in globals()
+target_catalog = resolve_catalog(target_schema) if spark_available else None
 
 print(f"Lab root: {lab_root}")
-print(f"Using schema: {target_catalog}.{target_schema}")
+if spark_available:
+    print(f"Using schema: {target_catalog}.{target_schema}")
+else:
+    print("Spark is not available. Using local CSV fallback.")
 
 # COMMAND ----------
 
 # DBTITLE 1,Data quality check
-quality_df = spark.sql(f"""
-    SELECT
-        'transactions' AS table_name,
-        COUNT(*) AS rows,
-        SUM(CASE WHEN CustomerID IS NULL THEN 1 ELSE 0 END) AS missing_customer_id,
-        SUM(CASE WHEN Country IS NULL THEN 1 ELSE 0 END) AS missing_country,
-        SUM(CASE WHEN Revenue IS NULL OR Revenue < 0 THEN 1 ELSE 0 END) AS invalid_revenue
-    FROM {table_id("transactions")}
-""").toPandas()
+if spark_available:
+    quality_df = spark.sql(f"""
+        SELECT
+            'transactions' AS table_name,
+            COUNT(*) AS rows,
+            SUM(CASE WHEN CustomerID IS NULL THEN 1 ELSE 0 END) AS missing_customer_id,
+            SUM(CASE WHEN Country IS NULL THEN 1 ELSE 0 END) AS missing_country,
+            SUM(CASE WHEN Revenue IS NULL OR Revenue < 0 THEN 1 ELSE 0 END) AS invalid_revenue
+        FROM {table_id("transactions")}
+    """).toPandas()
+else:
+    transactions_pdf = pd.read_csv(raw_path / "transactions.csv")
+    quality_df = pd.DataFrame(
+        [
+            {
+                "table_name": "transactions",
+                "rows": len(transactions_pdf),
+                "missing_customer_id": transactions_pdf["CustomerID"].isna().sum(),
+                "missing_country": transactions_pdf["Country"].isna().sum(),
+                "invalid_revenue": (transactions_pdf["Revenue"].isna() | (transactions_pdf["Revenue"] < 0)).sum(),
+            }
+        ]
+    )
 
-display(quality_df)
+if "display" in globals():
+    display(quality_df)
+else:
+    print(quality_df)
 
 # COMMAND ----------
 
 # DBTITLE 1,Build customer features
-customer_features_df = spark.sql(f"""
+if spark_available:
+    customer_features_df = spark.sql(f"""
     WITH cleaned AS (
         SELECT
             t.CustomerID,
             t.Country,
             COALESCE(r.RegionGroup, 'Other') AS RegionGroup,
-            t.InvoiceDate,
-            t.InvoiceNo,
-            t.Quantity,
-            t.UnitPrice,
-            t.Revenue
-        FROM {table_id("transactions")} t
-        LEFT JOIN {table_id("regions")} r
-            ON t.Country = r.Country
+                t.InvoiceDate,
+                t.InvoiceNo,
+                t.Quantity,
+                t.UnitPrice,
+                t.Revenue
+            FROM {table_id("transactions")} t
+            LEFT JOIN {table_id("regions")} r
+                ON t.Country = r.Country
         WHERE t.CustomerID IS NOT NULL
           AND t.Revenue IS NOT NULL
           AND t.Revenue >= 0
+    ),
+    snapshot AS (
+        SELECT DATE_ADD(MAX(InvoiceDate), 1) AS snapshot_date
+        FROM cleaned
     ),
     aggregated AS (
         SELECT
@@ -95,39 +122,106 @@ customer_features_df = spark.sql(f"""
             Country,
             RegionGroup,
             MAX(InvoiceDate) AS last_purchase_date,
-            DATEDIFF(CURRENT_DATE(), MAX(InvoiceDate)) AS recency_days,
+            DATEDIFF((SELECT snapshot_date FROM snapshot), MAX(InvoiceDate)) AS recency_days,
             COUNT(DISTINCT InvoiceNo) AS frequency,
             ROUND(SUM(Revenue), 2) AS monetary,
             ROUND(AVG(Revenue), 2) AS avg_order_value,
-            SUM(Quantity) AS basket_size,
-            ROUND(AVG(Quantity), 2) AS avg_items_per_invoice,
-            COUNT(DISTINCT CONCAT(InvoiceNo, '-', COALESCE(CAST(Quantity AS STRING), 'NA'))) AS unique_products,
-            ROUND(AVG(UnitPrice), 2) AS avg_unit_price
-        FROM cleaned
-        GROUP BY CustomerID, Country, RegionGroup
+                SUM(Quantity) AS basket_size,
+                ROUND(AVG(Quantity), 2) AS avg_items_per_invoice,
+                COUNT(DISTINCT CONCAT(InvoiceNo, '-', COALESCE(CAST(Quantity AS STRING), 'NA'))) AS unique_products,
+                ROUND(AVG(UnitPrice), 2) AS avg_unit_price
+            FROM cleaned
+            GROUP BY CustomerID, Country, RegionGroup
+        )
+        SELECT * FROM aggregated
+    """)
+
+    (
+        customer_features_df.write.format("delta")
+        .mode("overwrite")
+        .option("overwriteSchema", "true")
+        .saveAsTable(table_id("customer_enriched"))
     )
-    SELECT * FROM aggregated
-""")
 
-(
-    customer_features_df.write.format("delta")
-    .mode("overwrite")
-    .option("overwriteSchema", "true")
-    .saveAsTable(table_id("customer_enriched"))
-)
+    customer_count = customer_features_df.count()
+    print(f"Saved {customer_count:,} customers to {target_catalog}.{target_schema}.customer_enriched")
+    customer_features_pdf = customer_features_df.toPandas()
+else:
+    regions_pdf = pd.read_csv(raw_path / "regions.csv")
+    cleaned_pdf = (
+        transactions_pdf.merge(regions_pdf[["Country", "RegionGroup"]], on="Country", how="left")
+        .assign(RegionGroup=lambda df: df["RegionGroup"].fillna("Other"))
+    )
+    cleaned_pdf = cleaned_pdf[
+        cleaned_pdf["CustomerID"].notna()
+        & cleaned_pdf["Revenue"].notna()
+        & (cleaned_pdf["Revenue"] >= 0)
+    ].copy()
+    cleaned_pdf["InvoiceDate"] = pd.to_datetime(cleaned_pdf["InvoiceDate"])
+    snapshot_date = cleaned_pdf["InvoiceDate"].max().normalize() + pd.Timedelta(days=1)
 
-customer_count = customer_features_df.count()
-print(f"Saved {customer_count:,} customers to {target_catalog}.{target_schema}.customer_enriched")
+    customer_features_pdf = (
+        cleaned_pdf.groupby(["CustomerID", "Country", "RegionGroup"], as_index=False)
+        .agg(
+            last_purchase_date=("InvoiceDate", "max"),
+            frequency=("InvoiceNo", "nunique"),
+            monetary=("Revenue", "sum"),
+            avg_order_value=("Revenue", "mean"),
+            basket_size=("Quantity", "sum"),
+            avg_items_per_invoice=("Quantity", "mean"),
+            avg_unit_price=("UnitPrice", "mean"),
+        )
+    )
+    customer_features_pdf["recency_days"] = (snapshot_date - customer_features_pdf["last_purchase_date"]).dt.days
+    unique_products_pdf = (
+        cleaned_pdf.assign(invoice_quantity=cleaned_pdf["InvoiceNo"].astype(str) + "-" + cleaned_pdf["Quantity"].astype(str))
+        .groupby(["CustomerID", "Country", "RegionGroup"])["invoice_quantity"]
+        .nunique()
+        .rename("unique_products")
+        .reset_index()
+    )
+    customer_features_pdf = customer_features_pdf.merge(
+        unique_products_pdf,
+        on=["CustomerID", "Country", "RegionGroup"],
+        how="left",
+    )
+    customer_features_pdf = customer_features_pdf[
+        [
+            "CustomerID",
+            "Country",
+            "RegionGroup",
+            "last_purchase_date",
+            "recency_days",
+            "frequency",
+            "monetary",
+            "avg_order_value",
+            "basket_size",
+            "avg_items_per_invoice",
+            "unique_products",
+            "avg_unit_price",
+        ]
+    ]
+    customer_features_pdf = customer_features_pdf.round(
+        {
+            "monetary": 2,
+            "avg_order_value": 2,
+            "avg_items_per_invoice": 2,
+            "avg_unit_price": 2,
+        }
+    )
+    print(f"Built {len(customer_features_pdf):,} customers from local CSV files")
 
 # COMMAND ----------
 
 # DBTITLE 1,Save CSV copy for pandas workflow
-customer_features_pdf = customer_features_df.toPandas()
 customer_features_csv = processed_path / "customer_enriched.csv"
 customer_features_pdf.to_csv(customer_features_csv, index=False)
 
 print(f"Saved CSV copy to: {customer_features_csv}")
-display(customer_features_pdf.head())
+if "display" in globals():
+    display(customer_features_pdf.head())
+else:
+    print(customer_features_pdf.head())
 
 # COMMAND ----------
 
@@ -138,7 +232,10 @@ missing_values_df = (
     .rename("missing_values")
     .to_frame()
 )
-display(missing_values_df)
+if "display" in globals():
+    display(missing_values_df)
+else:
+    print(missing_values_df)
 
 # COMMAND ----------
 
