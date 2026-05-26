@@ -1,10 +1,10 @@
-# Kompetenskvall labb
+# Kompetenskväll labb
 
-Ett enkelt Databricks-labb for BI-konsulter som visar en komplett ML-pipeline for kundsegmentering.
+Ett enkelt Databricks-labb för BI-konsulter som visar en komplett ML-pipeline för kundsegmentering.
 
-## Mal
+## Mål
 
-Ladda upp projektet som en zip i Databricks Free och kor notebooksen i ordning:
+Ladda upp projektet som en zip i Databricks Free och kör notebooksen i ordning:
 
 1. `notebooks/00_csv_to_delta_setup.py`
 2. `notebooks/01_prepare_and_explore.py`
@@ -13,14 +13,14 @@ Ladda upp projektet som en zip i Databricks Free och kor notebooksen i ordning:
 ## Vad labbet visar
 
 - CSV till Delta tables
-- SQL-first forberedelse av data
+- SQL-first förberedelse av data
 - join mot lookup-tabell
-- kundfeatures pa kundniva
+- kundfeatures på kundnivå
 - KMeans-klustring med `scikit-learn Pipeline`
-- val av antal kluster med silhouette score
-- inference pa nya kunder med samma pipeline
+- val av antal kluster med silhouette score och elbow-metoden
+- inference på nya kunder med samma pipeline
 
-## Ovninsmoment i notebook 02
+## Övningsmoment i notebook 02
 
 Notebook 02 startar med en enkel RFM-baseline:
 
@@ -28,18 +28,18 @@ Notebook 02 startar med en enkel RFM-baseline:
 - `frequency`
 - `monetary`
 
-Deltagarna kan sedan sla pa fler foreslagna features i notebooken och jamfora silhouette score, klusterprofil och inference-resultat.
+Deltagarna kan sedan slå på fler föreslagna features i notebooken och jämföra silhouette score, elbow-kurva, klusterprofil och inference-resultat.
 
 ## Repo-struktur
 
-- `data/raw/transactions.csv` - raa transaktioner
-- `data/raw/regions.csv` - lookup-tabell for land och region
-- `data/raw/new_customers.csv` - nya kunder for inference
+- `data/raw/transactions.csv` - råa transaktioner
+- `data/raw/regions.csv` - lookup-tabell för land och region
+- `data/raw/new_customers.csv` - nya kunder för inference
 - `notebooks/00_csv_to_delta_setup.py` - konverterar CSV till Delta
 - `notebooks/01_prepare_and_explore.py` - bygger customer features
-- `notebooks/02_train_and_infer.py` - tranar modell och gor inference
+- `notebooks/02_train_and_infer.py` - tränar modell och gör inference
 
-Notebooksen skapar dessa foldrar nar de kors:
+Notebooksen skapar dessa foldrar när de körs:
 
 - `data/processed/`
 - `outputs/`
@@ -50,15 +50,15 @@ Notebooksen skapar dessa foldrar nar de kors:
 
 1. Zippa projektmappen.
 2. Ladda upp zippen i Databricks workspace.
-3. Oppna `00_csv_to_delta_setup.py` och kor hela notebooken.
-4. Oppna `01_prepare_and_explore.py` och kor hela notebooken.
-5. Oppna `02_train_and_infer.py` och kor hela notebooken.
+3. Öppna `00_csv_to_delta_setup.py` och kör hela notebooken.
+4. Öppna `01_prepare_and_explore.py` och kör hela notebooken.
+5. Öppna `02_train_and_infer.py` och kör hela notebooken.
 
-Notebooksen forsoker anvanda catalog `workspace` och schema `kompetenskvall_labb`. Om `workspace` inte finns faller notebook 00 tillbaka till `hive_metastore`.
+Notebooksen försöker använda catalog `workspace` och schema `kompetenskvall_labb`. Om `workspace` inte finns faller notebook 00 tillbaka till `hive_metastore`.
 
-## Datakalla
+## Datakälla
 
-Labbet anvander UCI-datasetet Online Retail:
+Labbet använder UCI-datasetet Online Retail:
 https://archive.ics.uci.edu/dataset/352/online-retail
 
 ## Lokalt Python-labb
@@ -69,4 +69,4 @@ Om du vill testa delar lokalt kan du installera beroenden:
 pip install -r requirements.txt
 ```
 
-Databricks-notebooksen kraver dock Spark/Databricks for Delta-steget.
+Databricks-notebooksen kräver dock Spark/Databricks för Delta-steget.
